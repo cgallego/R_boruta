@@ -1,0 +1,134 @@
+Feature relevance stage 1
+====================
+```{r}
+setwd("Z:/Cristina/MassNonmass/Section1 - ExperimentsUpToDate/experimentsRadiologypaper-revision/boruta")
+read_inputdataStage1 <- function(subdata, ids) {
+  library("RSQLite")
+  sqlite <- dbDriver("SQLite")
+  conn <- dbConnect(sqlite, "stage1localData.db")
+  
+  # 2) all T1W features
+  lesionsQuery <- dbGetQuery(conn, "SELECT *
+           FROM  stage1features
+           INNER JOIN lesion ON (stage1features.lesion_id = lesion.lesion_id)
+           INNER JOIN f_dynamic ON (stage1features.lesion_id = f_dynamic.lesion_id)
+           INNER JOIN f_morphology ON (stage1features.lesion_id = f_morphology.lesion_id)
+           INNER JOIN f_texture ON (stage1features.lesion_id = f_texture.lesion_id)")
+  
+  # prune entries and extract feature subsets
+  # corresponds to 5 entries lesion info, 34 dynamic, 19 morpho, 34 texture fueatures
+  lesionfields =  names(lesionsQuery)
+  lesioninfo = lesionsQuery[c(1,2,150,151)]
+  stage1features = lesionsQuery[c(3:103,124:127)]
+  dynfeatures = lesionsQuery[c(154:187)]
+  morphofeatures = lesionsQuery[c(190:208)]
+  texfeatures = lesionsQuery[c(211:234)]
+  
+  # combine all features
+  allfeatures = cbind(lesioninfo[c(2,3)], stage1features, dynfeatures, morphofeatures, texfeatures)   
+  
+  if(subdata=="stage2"){
+    # organized the data by subdata
+    allfeatures = allfeatures[ids,]
+    M<-subset(allfeatures, lesion_label=="massB" | lesion_label=="massM")
+    ifelse( M$lesion_label == "massB", "NC", "C") -> M$lesion_label
+    N<-subset(allfeatures, lesion_label=="nonmassB" | lesion_label=="nonmassM")
+    ifelse( N$lesion_label == "nonmassB", "NC", "C") -> N$lesion_label
+    allfeatures = rbind(M,N)
+  }
+  if(subdata=="stage1"){
+    # organized the data by subdata
+    allfeatures = allfeatures[ids,]
+    M<-subset(allfeatures, lesion_label=="massB" | lesion_label=="massM")
+    ifelse( M$lesion_label == "massB", "mass", "mass") -> M$lesion_label
+    N<-subset(allfeatures, lesion_label=="nonmassB" | lesion_label=="nonmassM")
+    ifelse( N$lesion_label == "nonmassB", "nonmass", "nonmass") -> N$lesion_label
+    allfeatures = data.frame(rbind(M,N))     
+  }
+  if(subdata=="oneshot"){
+    # organized the data by subdata
+    allfeatures = allfeatures[ids,]
+    M<-subset(allfeatures, lesion_label=="massB" | lesion_label=="massM")
+    ifelse( M$lesion_label == "massB", "NC", "C") -> M$lesion_label
+    N<-subset(allfeatures, lesion_label=="nonmassB" | lesion_label=="nonmassM")
+    ifelse( N$lesion_label == "nonmassB", "NC", "C") -> N$lesion_label
+    allfeatures = data.frame(rbind(M,N)) 
+  }
+  # procees data
+  allfeatures$lesion_label <- as.factor(allfeatures$lesion_label)
+  allfeatures$peakCr_inside <- as.factor(allfeatures$peakCr_inside)
+  allfeatures$peakVr_inside <- as.factor(allfeatures$peakVr_inside)
+  allfeatures$peakCr_countor <- as.factor(allfeatures$peakCr_countor)
+  allfeatures$peakVr_countor <- as.factor(allfeatures$peakVr_countor)
+  allfeatures$k_Max_Margin_Grad <- as.factor(allfeatures$k_Max_Margin_Grad)
+  allfeatures$max_RGH_mean_k <- as.factor(allfeatures$max_RGH_mean_k)
+  allfeatures$max_RGH_var_k <- as.factor(allfeatures$max_RGH_var_k)
+  
+  output <- allfeatures
+  return(output)
+}
+```
+
+You can also embed plots, for example:
+```{r fig.width=7, fig.height=6}
+stage1dat = read_inputdataStage1("stage1", 1:409)
+
+library("Boruta")
+require(data.table)
+require(ggplot2)
+set.seed(111)
+stage1datnaomit = na.omit(stage1dat)
+stage1Boruta <-Boruta(lesion_label ~., data=stage1datnaomit[,2:184], doTrace=2, ntree=1000)
+stage1Boruta
+plot(stage1Boruta)
+
+```
+
+Now plot Z-scores:
+============
+```{r latticeex}
+#########################################
+#######################
+library("latticeExtra")
+rankingsstage1 <- stage1Boruta$ImpHistory
+confirmedstage1_features<-stage1Boruta$finalDecision[stage1Boruta$finalDecision == "Confirmed"]
+# Confirmed stage1 features
+print(confirmedstage1_features)
+
+####### proces Masses (add fist confirmed feature)
+cfeature = as.data.frame(confirmedstage1_features[1])  
+stage1frame=data.frame(zscores=rankingsstage1[is.finite(rankingsstage1[,rownames(cfeature)]),rownames(cfeature)])
+stage1frame$MorN = "stage1"
+stage1frame$feature = rownames(cfeature)
+stage1zscore_selected <- stage1frame
+
+Medz_scorestage1 = character(length(confirmedstage1_features))
+Medz_scorestage1[1] <-  median(stage1frame$zscores)
+featlabels = character(length(confirmedstage1_features))
+featlabels[1] <-  rownames(cfeature)
+
+# proces remaining confirmed feature stage1es
+for (i in 2:length(confirmedstage1_features)) {
+  cfeature = as.data.frame(confirmedstage1_features[i])  
+  stage1frame=data.frame(zscores=rankingsstage1[,rownames(cfeature)])
+  stage1frame$MorN = "stage1"
+  stage1frame$feature = rownames(cfeature)
+  stage1zscore_selected[nrow(stage1zscore_selected)+1:nrow(stage1frame),] <-  stage1frame
+  
+  Medz_scorestage1[i] <- median(stage1frame$zscores)
+  featlabels[i] <-  rownames(cfeature)
+}
+
+# format 
+featframe=data.frame(feature=featlabels)
+featframe$Medz_scorestage1 = Medz_scorestage1
+print(featframe)
+featframe$color <- "mediumpurple3"
+
+#plot
+dotchart(as.numeric(featframe$Medz_scorestage1), labels=featframe$feature, cex=0.8,
+    pch=22, lwd=2, xlim=range(-1,8), 
+    gcolor="black", lcolor=featframe$color, bg=featframe$color,
+    main="Median Z-scores for stage1 feature type",
+    xlab="median Z-score relevance")
+

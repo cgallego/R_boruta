@@ -1,0 +1,47 @@
+commonly relevant
+
+
+pval: < 0.001             Slope_ini_inside 7.41995952907895  5.39338750016501
+pval: 0.0018789                   SER_inside 5.85918236859728  5.62377402227592
+pval: < 0.001            UptakeRate_inside 5.16074657051028   4.0837633182279
+pval: < 0.001           washoutRate_inside 4.82343974491284  3.40697029254541
+pval: < 0.001            Slope_ini_countor 5.29688867741446  6.28165293861431
+pval: < 0.001                  SER_countor 4.23199187072562  6.50576239656254
+pval: < 0.001                    max_F_r_i 5.41738092319141  4.68435757977446
+pval: < 0.001                   mean_F_r_i 3.72763216686067  4.46051599608606
+pval: 0.0014882                    var_F_r_i 3.84296983952241   4.2485697296019
+
+
+non-commonly relevant
+MASS
+            pvalue                      feature   Medz_scoreMass Medz_scoreNonmass
+1    pval: < 0.001                 alpha_inside 3.72643460791657  2.29647635327051
+2    pval: < 0.001                 iAUC1_inside 5.49653202325443              -Inf
+4    pval: < 0.001                 Tpeak_inside 3.25426170908672              -Inf
+6    pval: < 0.001                 maxCr_inside 4.12899158899416              -Inf
+11   pval: < 0.001                maxCr_countor  4.0054234587162              -Inf
+12   pval: < 0.001           UptakeRate_countor 5.42436538699713              -Inf
+13   pval: < 0.001          washoutRate_countor 5.25431465503698              -Inf
+17   pval: < 0.001 iiMin_change_Variance_uptake 5.00746706662652   2.8749205935935
+18   pval: < 0.001                  circularity 5.44714550785231              -Inf
+19   pval: < 0.001                 irregularity 6.62392457188307              -Inf
+20   pval: < 0.001             texture_ASM_zero 4.42023074979814              -Inf
+21   pval: < 0.001       texture_ASM_quarterRad 4.34625980964635              -Inf
+22   pval: < 0.001          texture_ASM_halfRad 4.18560791748292              -Inf
+23   pval: < 0.001      texture_ASM_threeQuaRad 4.38968595751726              -Inf
+24   pval: < 0.001          texture_energy_zero 4.49929827917123              -Inf
+25   pval: < 0.001    texture_energy_quarterRad 4.27763740596377              -Inf
+26   pval: < 0.001       texture_energy_halfRad 4.19645399080177              -Inf
+27   pval: < 0.001   texture_energy_threeQuaRad 4.30967681885716              -Inf
+
+
+NONMASS
+            pvalue                           feature Medz_scoreNonmass    Medz_scoreMass
+3    pval: < 1e-04                     peakCr_inside   3.4969086461104  3.03978972098254
+6    pval: < 1e-04                     alpha_countor  5.80303637208856   2.3506401440379
+12   pval: < 1e-04            iiiMax_Margin_Gradient  6.08490013970087 0.677118409466961
+13   pval: < 1e-04                        ivVariance  4.28443583006683  1.03050119388507
+14   pval: < 1e-04                    edge_sharp_std  4.16420379668512  1.90386975007468
+15   pval: < 1e-04          texture_contrast_halfRad  3.82786421912304  2.67525813492422
+16   pval: < 1e-04      texture_contrast_threeQuaRad  3.78731132298919   2.7261893707716
+17   pval: < 1e-04 texture_dissimilarity_threeQuaRad  3.72648168226528  1.26186964660343

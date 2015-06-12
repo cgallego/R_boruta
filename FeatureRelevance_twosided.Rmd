@@ -1,0 +1,371 @@
+Feature relevance via Z-scores
+========================================================
+
+```{r}
+library("Boruta")
+require(data.table)
+require(ggplot2)
+library("RSQLite")
+sqlite <- dbDriver("SQLite")
+conn <- dbConnect(sqlite, "localData.db")
+
+# only mass, all T1W features
+massQuery <- dbGetQuery(conn, "SELECT *
+                        FROM  mass_lesion
+                        INNER JOIN lesion ON (mass_lesion.lesion_id = lesion.lesion_id)
+                        INNER JOIN f_dynamic ON (lesion.lesion_id = f_dynamic.lesion_id)
+                        INNER JOIN f_morphology ON (lesion.lesion_id = f_morphology.lesion_id)
+                        INNER JOIN f_texture ON (lesion.lesion_id = f_texture.lesion_id)")
+
+# prune entries and extract feature subsets
+# corresponds to 5 entries lesion info, 34 dynamic, 19 morpho, 34 texture fueatures
+massfields = names(massQuery[c(0:3,30,31,34:67,70:88,91:114)])
+masslesioninfo = massQuery[c(1:3,30,31)]
+massfeatures = massQuery[c(1,3,34:67,70:88,91:114)]
+massfeatures$BenignNMaligNAnt <- as.factor(massfeatures$BenignNMaligNAnt)
+write.csv(massfeatures, file = "allmassfeatures.csv")
+
+# only Nonmass, all T1W features
+nonmassQuery <- dbGetQuery(conn, "SELECT *
+                          FROM  nonmass_lesion
+                          INNER JOIN lesion ON (nonmass_lesion.lesion_id = lesion.lesion_id)
+                          INNER JOIN f_dynamic ON (lesion.lesion_id = f_dynamic.lesion_id)
+                          INNER JOIN f_morphology ON (lesion.lesion_id = f_morphology.lesion_id)
+                          INNER JOIN f_texture ON (lesion.lesion_id = f_texture.lesion_id)")
+
+# prune entries and extract feature subsets
+# corresponds to 5 entries lesion info, 34 dynamic, 19 morpho, 34 texture fueatures
+nonmassfields = names(nonmassQuery[c(0:3,30,31,34:67,70:88,91:114)])
+nonmasslesioninfo = nonmassQuery[c(1:3,30,31)]
+nonmassfeatures = nonmassQuery[c(1,3,34:67,70:88,91:114)]
+nonmassfeatures$BenignNMaligNAnt <- as.factor(nonmassfeatures$BenignNMaligNAnt)
+write.csv(nonmassfeatures, file = "nonmassfeatures.csv")
+
+
+# all T1W features
+lesionsQuery <- dbGetQuery(conn, "SELECT *
+                        FROM  lesion
+                        INNER JOIN f_dynamic ON (lesion.lesion_id = f_dynamic.lesion_id)
+                        INNER JOIN f_morphology ON (lesion.lesion_id = f_morphology.lesion_id)
+                        INNER JOIN f_texture ON (lesion.lesion_id = f_texture.lesion_id)")
+
+# prune entries and extract feature subsets
+# corresponds to 5 entries lesion info, 34 dynamic, 19 morpho, 34 texture fueatures
+lesionsfields = names(lesionsQuery[c(1,23,24,3,5,27:60,63:81,84:107)])
+lesioninfo = lesionsQuery[c(1,23,24,3,5)]
+features = lesionsQuery[c(1,23,27:60,63:81,84:107)]
+
+M<-subset(features, lesion_label=="massB" | lesion_label=="massM")
+ifelse( M$lesion_label == "massB", "mass", "mass") -> M$lesion_label
+N<-subset(features, lesion_label=="nonmassB" | lesion_label=="nonmassM")
+ifelse( N$lesion_label == "nonmassB", "nonmass", "nonmass") -> N$lesion_label
+massnonmassfeatures = data.frame(rbind(M,N))
+colnames(massnonmassfeatures)[2] <- "BenignNMaligNAnt"
+massnonmassfeatures$BenignNMaligNAnt <- as.factor(massnonmassfeatures$BenignNMaligNAnt)
+write.csv(massnonmassfeatures, file = "massnonmassfeatures.csv")
+
+# BenignvsMalignant T1W features
+B<-subset(features, lesion_label=="massB" | lesion_label=="nonmassB")
+ifelse( B$lesion_label == "massB", "NC", "NC") -> B$lesion_label
+M<-subset(features, lesion_label=="massM" | lesion_label=="nonmassM")
+ifelse( M$lesion_label == "massM", "C", "C") -> M$lesion_label
+BenignvsMalignantfeatures = data.frame(rbind(B,M))
+colnames(BenignvsMalignantfeatures)[2] <- "BenignNMaligNAnt"
+BenignvsMalignantfeatures$BenignNMaligNAnt <- as.factor(BenignvsMalignantfeatures$BenignNMaligNAnt)
+write.csv(BenignvsMalignantfeatures, file = "BenignvsMalignantfeatures.csv")
+
+# multiclass T1W features
+multiclassfeatures = features
+colnames(multiclassfeatures)[2] <- "BenignNMaligNAnt"
+multiclassfeatures$BenignNMaligNAnt <- as.factor(multiclassfeatures$BenignNMaligNAnt)
+write.csv(multiclassfeatures, file = "multiclassfeatures.csv")
+
+#Color codes:
+#  c("green", "yellow", "red", "blue"),
+#  Confirmed, Tentative, Rejected and shadow.
+# Blue boxplots correspond to minimal, average and maximum Z score of a shadow attribute. Red
+
+#Boruta mass:
+set.seed(111)
+massBoruta <-Boruta(BenignNMaligNAnt ~., data=massfeatures[,2:79], doTrace=2, ntree=500)
+massBoruta
+
+plot(massBoruta)
+
+#Boruta non-mass:
+set.seed(111)
+nonmassBoruta <-Boruta(BenignNMaligNAnt ~., data=nonmassfeatures[,2:79], doTrace=2, ntree=500)
+nonmassBoruta
+
+plot(nonmassBoruta)
+
+#Boruta for mass vs nonmass
+set.seed(111)
+massnonmassBoruta <-Boruta(BenignNMaligNAnt ~., data=massnonmassfeatures[,2:79], doTrace=2, ntree=500)
+massnonmassBoruta
+
+plot(massnonmassBoruta)
+
+#Boruta for benign vs malignant
+set.seed(111)
+BenignvsMalignantBoruta <-Boruta(BenignNMaligNAnt ~., data=BenignvsMalignantfeatures[,2:79], doTrace=2, ntree=500)
+BenignvsMalignantBoruta
+
+plot(BenignvsMalignantBoruta)
+
+#Boruta for multiclass
+set.seed(111)
+multiclassBoruta <-Boruta(BenignNMaligNAnt ~., data=multiclassfeatures[,2:79], doTrace=2, ntree=500)
+multiclassBoruta
+
+plot(multiclassBoruta)
+
+```
+
+Now plot Z-scores:
+=======================
+```{r latticeex}
+#########################################
+#######################
+library("latticeExtra")
+rankingsmass <- massBoruta$ImpHistory
+rankingsnonmass <- nonmassBoruta$ImpHistory
+
+confirmedmass_features<-massBoruta$finalDecision[massBoruta$finalDecision == "Confirmed"]
+# Confirmed mass features
+print(confirmedmass_features)
+
+confirmednonmass_features<-nonmassBoruta$finalDecision[nonmassBoruta$finalDecision == "Confirmed"]
+# Confirmed nonmass features
+print(confirmednonmass_features)
+
+
+####### proces Masses (add fist confirmed feature)
+cfeature = as.data.frame(confirmedmass_features[1])  
+massframe=data.frame(zscores=rankingsmass[is.finite(rankingsmass[,rownames(cfeature)]),rownames(cfeature)])
+massframe$MorN = "mass"
+massframe$feature = rownames(cfeature)
+masszscore_selected <- massframe
+
+nonmassframe=data.frame(zscores=rankingsnonmass[is.finite(rankingsnonmass[,rownames(cfeature)]),rownames(cfeature)])
+nonmassframe$MorN = "nonmass"
+nonmassframe$feature = rownames(cfeature)
+masszscore_selected[nrow(masszscore_selected)+1:nrow(nonmassframe),] <-  nonmassframe
+
+masszscore_ttest = numeric(length(confirmedmass_features))
+masszscore_ttest[1] = t.test(as.data.frame(massframe)$zscores, as.data.frame(nonmassframe)$zscores, alternative = "two.sided", paired=FALSE, var.equal = FALSE)$p.value
+
+pvallabels = character(length(confirmedmass_features))
+pvallabels[1] <-  rownames(cfeature)
+
+Medz_scoreMass = character(length(confirmedmass_features))
+Medz_scoreMass[1] <-  median(massframe$zscores)
+Medz_scoreNonmass = character(length(confirmedmass_features))
+Medz_scoreNonmass[1] <-  median(nonmassframe$zscores)
+
+# proces remaining confirmed feature Masses
+for (i in 2:length(confirmedmass_features)) {
+  cfeature = as.data.frame(confirmedmass_features[i])  
+  massframe=data.frame(zscores=rankingsmass[,rownames(cfeature)])
+  massframe$MorN = "mass"
+  massframe$feature = rownames(cfeature)
+  masszscore_selected[nrow(masszscore_selected)+1:nrow(massframe),] <-  massframe
+  
+  nonmassframe=data.frame(zscores=rankingsnonmass[,rownames(cfeature)])
+  nonmassframe$MorN = "nonmass"
+  nonmassframe$feature = rownames(cfeature)
+  masszscore_selected[nrow(masszscore_selected)+1:nrow(nonmassframe),] <-  nonmassframe
+  
+  # p-values test
+  masszscore_ttest[i] = t.test(massframe$zscores[is.finite(massframe$zscores)], nonmassframe$zscores[is.finite(nonmassframe$zscores)], alternative = "two.sided", paired=FALSE, var.equal = FALSE)$p.value
+  pvallabels[i] <-  rownames(cfeature)
+  
+  Medz_scoreMass[i] <- median(massframe$zscores)
+  Medz_scoreNonmass[i] <- median(nonmassframe$zscores)
+}
+
+# format p values and order in dataframe
+dt <- data.table(masszscore_ttest)
+pval <- dt[, list(pvalue = paste0("pval: ", format.pval(masszscore_ttest,  eps=0.001)))]
+  
+pvalframe=data.frame(pvalue=pval)
+pvalframe$feature = pvallabels
+pvalframe$Medz_scoreMass = Medz_scoreMass
+pvalframe$Medz_scoreNonmass = Medz_scoreNonmass
+print(pvalframe)
+
+```
+Create steam plot with MedZ-scores mass vs. non-mass
+
+```{r}
+
+pvalframe$Medz_scoreMass <- as.numeric(pvalframe$Medz_scoreMass)
+pvalframe$Medz_scoreNonmass <- as.numeric(pvalframe$Medz_scoreNonmass)
+#pvalframe <- pvalframe[order(pvalframe$Medz_scoreMass, decreasing = TRUE),] # sort decre by Medz_scoreMass
+pvalframe$feature <- factor(pvalframe$feature) # it must be a factor
+pvalframe$Medz_scoreNonmass[pvalframe$Medz_scoreNonmass==-Inf] = 0.0
+
+pvalframe$color <- "skyblue3"
+pvalframe$color[18:19] <- "mediumpurple3"
+pvalframe$color[20:27] <- "darkseagreen4"
+
+dotchart(pvalframe$Medz_scoreMass, labels=pvalframe$feature, cex=0.8,
+    pch=22, lwd=2, xlim=range(-1,8), 
+    gcolor="black", lcolor=pvalframe$color, bg=pvalframe$color,
+    main="Median Z-scores for mass and non-mass lesions\ngrouped feature type",
+    xlab="median Z-score relevance")
+par(new=TRUE)
+dotchart(pvalframe$Medz_scoreNonmass, labels=pvalframe$feature, cex=0.8,
+          pch=24, lwd=2, xlim=range(-1,8), 
+         gcolor="black", lcolor=pvalframe$color, bg=pvalframe$color)
+legend("topright", legend=c("mass", "nonmass"), pch=c(22,24), lwd=2, col=c("black", "black"))
+
+```
+
+
+
+# generate boxplot comparison of relevant mass features vs. the same non-mass feature
+
+```{r fig.width=18, fig.height=6, echo=FALSE}
+######################### NOTE PVALUES PRINTING IS NOT IN ORDER NEED TO MANUAL ADJUST
+ggplot() + 
+  geom_boxplot(data = masszscore_selected, mapping=aes(x=MorN, y=zscores, fill = factor(MorN))) + 
+  geom_text(data = pvalframe, aes(label=pvalue, x="mass", y=9.5), position='dodge') +
+  facet_grid(~ feature) + theme_bw(base_size = 16) + 
+  labs(title = "Comparison of Z-scores for Mass confirmed features", y="Z-scores")+
+  theme(  axis.text.x=element_text(angle=0, face="bold", size=12),
+          legend.position = "bottom",
+          strip.background = element_rect(fill=NA), 
+          panel.grid.major.y = element_line(colour = "black", linetype = "dotted"), 
+          panel.grid.major.x = element_blank(),
+          panel.grid.minor = element_line(colour=NA))
+
+```
+
+
+```{r}
+####### proces Non-Masses
+bfeature = as.data.frame(confirmednonmass_features[1])  
+nonmassframe=data.frame(zscores=rankingsnonmass[is.finite(rankingsnonmass[,rownames(bfeature)]),rownames(bfeature)])
+nonmassframe$MorN = "nonmass"
+nonmassframe$feature = rownames(bfeature)
+nonmasszscore_selected <- nonmassframe
+
+massframe=data.frame(zscores=rankingsmass[is.finite(rankingsmass[,rownames(bfeature)]),rownames(bfeature)])
+massframe$MorN = "mass"
+massframe$feature = rownames(bfeature)
+nonmasszscore_selected[nrow(nonmasszscore_selected)+1:nrow(massframe),] <-  massframe
+
+nonmasszscore_ttest = numeric(length(confirmednonmass_features))
+nonmasszscore_ttest[1] = t.test(as.data.frame(nonmassframe)$zscores, as.data.frame(massframe)$zscores, alternative = "two.sided", paired=FALSE, var.equal = FALSE)$p.value
+
+Medz_scoreNonmass = character(length(confirmednonmass_features))
+Medz_scoreNonmass[1] <-  median(nonmassframe$zscores)
+Medz_scoreMass = character(length(confirmednonmass_features))
+Medz_scoreMass[1] <-  median(massframe$zscores)
+
+pvallabels = character(length(confirmednonmass_features))
+pvallabels[1] <-  rownames(bfeature)
+
+for (i in 2:length(confirmednonmass_features)) {
+  bfeature = as.data.frame(confirmednonmass_features[i]) 
+  nonmassframe=data.frame(zscores=rankingsnonmass[is.finite(rankingsnonmass[,rownames(bfeature)]),rownames(bfeature)])
+  nonmassframe$MorN = "nonmass"
+  nonmassframe$feature = rownames(bfeature)
+  nonmasszscore_selected[nrow(nonmasszscore_selected)+1:nrow(nonmassframe),] <-  nonmassframe
+  
+  massframe=data.frame(zscores=rankingsmass[is.finite(rankingsmass[,rownames(bfeature)]),rownames(bfeature)])
+  massframe$MorN = "mass"
+  massframe$feature = rownames(bfeature)
+  nonmasszscore_selected[nrow(nonmasszscore_selected)+1:nrow(massframe),] <-  massframe
+  
+  # p-values test
+  nonmasszscore_ttest[i] = t.test(as.data.frame(nonmassframe)$zscores, as.data.frame(massframe)$zscores, alternative = "two.sided", paired=FALSE, var.equal = FALSE)$p.value
+  
+  pvallabels[i] <-  rownames(bfeature)  
+  Medz_scoreMass[i] <- median(massframe$zscores)
+  Medz_scoreNonmass[i] <- median(nonmassframe$zscores)
+}
+
+# format p values and order in dataframe
+dt <- data.table(nonmasszscore_ttest)
+pval <- dt[, list(pvalue = paste0("pval: ", format.pval(nonmasszscore_ttest,  eps=0.001)))]
+  
+pvalframe=data.frame(pvalue=pval)
+pvalframe$feature = pvallabels
+pvalframe$Medz_scoreNonmass = Medz_scoreNonmass
+pvalframe$Medz_scoreMass = Medz_scoreMass
+print(pvalframe)
+
+```
+Create steam plot with MedZ-scores mass vs. non-mass
+
+```{r}
+
+pvalframe$Medz_scoreNonmass <- as.numeric(pvalframe$Medz_scoreNonmass)
+pvalframe$Medz_scoreMass <- as.numeric(pvalframe$Medz_scoreMass)
+#pvalframe <- pvalframe[order(pvalframe$Medz_scoreMass, decreasing = TRUE),] # sort decre by Medz_scoreMass
+pvalframe$feature <- factor(pvalframe$feature) # it must be a factor
+pvalframe$Medz_scoreNonmass[pvalframe$Medz_scoreNonmass==-Inf] = 0.0
+
+pvalframe$color <- "skyblue3"
+pvalframe$color[14] <- "mediumpurple3"
+pvalframe$color[15:17] <- "darkseagreen4"
+
+dotchart(pvalframe$Medz_scoreNonmass, labels=pvalframe$feature, cex=0.8,
+          pch=24, lwd=2, xlim=range(-1,8), 
+         gcolor="black", lcolor=pvalframe$color, bg=pvalframe$color)
+par(new=TRUE)
+dotchart(pvalframe$Medz_scoreMass, labels=pvalframe$feature, cex=0.8,
+    pch=22, lwd=2, xlim=range(-1,8), 
+    gcolor="black", lcolor=pvalframe$color, bg=pvalframe$color,
+    main="Median Z-scores for mass and non-mass lesions\ngrouped by feature type",
+    xlab="median Z-score relevance")
+legend("topright", legend=c("mass", "nonmass"), pch=c(22,24), lwd=2, col=c("black", "black"))
+
+
+```
+Create a stem plot of only common relevant features
+```{r}
+
+## subset pvalframe for only comonly relevant
+commonrelev=pvalframe[1:2,]
+commonrelev=rbind(commonrelev, pvalframe[4:5,])
+commonrelev=rbind(commonrelev, pvalframe[7:11,])
+print(commonrelev)
+
+dotchart(commonrelev$Medz_scoreNonmass, labels=commonrelev$feature, cex=0.8,
+          pch=24, lwd=2, xlim=range(-1,8), 
+         gcolor="black", lcolor=commonrelev$color, bg=commonrelev$color)
+par(new=TRUE)
+dotchart(commonrelev$Medz_scoreMass, labels=commonrelev$feature, cex=0.8,
+    pch=22, lwd=2, xlim=range(-1,8), 
+    gcolor="black", lcolor=commonrelev$color, bg=commonrelev$color,
+    main="Median Z-scores for mass and non-mass lesions\ngrouped by feature type",
+    xlab="median Z-score relevance")
+legend("topright", legend=c("mass", "nonmass"), pch=c(22,24), lwd=2, col=c("black", "black"))
+
+
+```
+
+
+
+
+```{r fig.width=18, fig.height=6, echo=FALSE}
+# generate boxplot comparison of relevant nonmass features vs. the same mass feature
+ggplot() + 
+  geom_boxplot(data = nonmasszscore_selected, mapping=aes(x=MorN, y=zscores, fill = factor(MorN))) + 
+  geom_text(data = pvalframe, aes(label=pvalue, x="mass", y=9.5)) +
+  facet_grid(~ feature) + theme_bw(base_size = 16) + 
+  labs(title = "Comparison of Z-scores for Non-mass confirmed features", y="Z-scores")+
+  theme(  axis.text.x=element_text(angle=0, face="bold", size=12),
+          legend.position = "bottom",
+          strip.background = element_rect(fill=NA), 
+          panel.grid.major.y = element_line(colour = "black", linetype = "dotted"), 
+          panel.grid.major.x = element_blank(), 
+          panel.grid.minor = element_line(colour=NA))
+
+
+```
+
+
